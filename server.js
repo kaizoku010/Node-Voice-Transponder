@@ -24,6 +24,15 @@ wss.on('connection', (ws) => {
   let filePath = path.join(RECORDINGS_DIR, `${sessionId}.wav`);
 
   ws.on('message', (msg, isBinary) => {
+    // Handle CLIENT_READY for broadcast control
+    try {
+      const parsed = JSON.parse(msg.toString());
+      if (parsed.type === 'CLIENT_READY') {
+        ws.send(JSON.stringify({ type: 'START_BROADCAST' }));
+        console.log(`[${sessionId}] Sent START_BROADCAST to client.`);
+        return;
+      }
+    } catch {}
     if (!fileWriter) {
       // Expect a JSON header first with audio format info
       try {
