@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Voice Socket Microservice UI</title>
+  <style>
+    body { background: #181f2a; color: #fff; font-family: 'Segoe UI', Arial, sans-serif; text-align: center; margin: 0; }
+    .container { max-width: 420px; margin: 40px auto; background: #232b3b; border-radius: 12px; box-shadow: 0 2px 16px #0004; padding: 32px 24px; }
+    h2 { color: #10a37f; }
+    button { padding: 12px 32px; font-size: 18px; border: none; border-radius: 6px; cursor: pointer; margin: 12px 0; }
+    .start { background: #10a37f; color: #fff; }
+    .stop { background: #e53935; color: #fff; }
+    canvas { background: #111826; border-radius: 8px; margin: 18px 0; }
+    .status { margin: 10px 0; color: #10a37f; }
+    .error { color: #ff5252; margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Voice Socket Microservice UI</h2>
+    <canvas id="waveform" width="350" height="100"></canvas>
+    <div>
+      <button id="startBtn" class="start">Start Recording</button>
+      <button id="stopBtn" class="stop" style="display:none;">Stop Recording</button>
+    </div>
+    <div class="status" id="wsStatus">WebSocket: disconnected</div>
+    <div class="error" id="error"></div>
+  </div>
+  <script>
+    let ws, mediaRecorder, audioContext, analyser, animationRef;
+    const wsStatus = document.getElementById('wsStatus');
+    const errorDiv = document.getElementById('error');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const canvas = document.getElementById('waveform');
+    const ctx = canvas.getContext('2d');
+
+    function drawWaveform() {
+      if (!analyser) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const bufferLength = analyser.fftSize;
+      const dataArray = new Uint8Array(bufferLength);
+      analyser.getByteTimeDomainData(dataArray);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = '#10a37f';
+      ctx.beginPath();
+      const sliceWidth = canvas.width / bufferLength;
+      let x = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        const v = dataArray[i] / 128.0;
+        const y = (v * canvas.height) / 2;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+        x += sliceWidth;
+      }
+      ctx.lineTo(canvas.width, canvas.height / 2);
+      ctx.stroke();
+      animationRef = requestAnimationFrame(drawWaveform);
+    }
+
+    startBtn.onclick = async () => {
+      errorDiv.textContent = '';
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 2048;
+        const source = audioContext.createMediaStreamSource(stream);
+        source.connect(analyser);
+        drawWaveform();
+        ws = new WebSocket(window.location.origin.replace(/^http/, 'ws'));
+        ws.onopen = () => {
+          wsStatus.textContent = 'WebSocket: connected';
+          ws.send(JSON.stringify({ type: 'START', sampleRate: audioContext.sampleRate, channels: 1 }));
+        };
+        ws.onclose = () => wsStatus.textContent = 'WebSocket: disconnected';
+        ws.onerror = () => errorDiv.textContent = 'WebSocket error';
+        mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0 && ws && ws.readyState === 1) {
+            e.data.arrayBuffer().then(buf => ws.send(buf));
+          }
+        };
+        mediaRecorder.start(250);
+        startBtn.style.display = 'none';
+        stopBtn.style.display = '';
+      } catch (err) {
+        errorDiv.textContent = 'Could not start recording: ' + err.message;
+      }
+    };
+
+    stopBtn.onclick = () => {
+      if (mediaRecorder) mediaRecorder.stop();
+      if (audioContext) audioContext.close();
+      if (ws) {
+        ws.send(JSON.stringify({ type: 'STOP' }));
+        ws.close();
+      }
+      if (animationRef) cancelAnimationFrame(animationRef);
+      startBtn.style.display = '';
+      stopBtn.style.display = 'none';
+    };
+  </script>
+</body>
+</html>

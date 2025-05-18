@@ -1,0 +1,15 @@
+{
+  "name": "voice-socket-service",
+  "version": "1.0.0",
+  "description": "Node.js WebSocket microservice for receiving and saving audio streams in real time.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.15.1",
+    "wav": "^1.0.2",
+    "uuid": "^9.0.1"
+  }
+}
