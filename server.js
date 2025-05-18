@@ -41,11 +41,15 @@ wss.on('connection', (ws) => {
         if (fileWriter && isBinary) {
           fileWriter.write(msg);
           console.log(`[${sessionId}] Received audio chunk (${msg.length} bytes)`);
+          // Echo audio chunk back to sender for real-time streaming
+          ws.send(msg, { binary: true });
         }
       }
     } else if (isBinary) {
       fileWriter.write(msg);
       console.log(`[${sessionId}] Received audio chunk (${msg.length} bytes)`);
+      // Echo audio chunk back to sender for real-time streaming
+      ws.send(msg, { binary: true });
     }
   });
 
